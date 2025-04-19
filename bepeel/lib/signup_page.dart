@@ -15,8 +15,31 @@ class _SignupPageState extends State<SignupPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _weightController = TextEditingController();
+  final _heightFeetController = TextEditingController();
+  final _heightInchesController = TextEditingController();
+  final _yearsJoinedController = TextEditingController();
+  String _selectedFitnessLevel = 'Beginner';
   String _errorMessage = '';
   bool _isLoading = false;
+
+  final List<String> _fitnessLevels = ['Beginner', 'Intermediate', 'Hardcore'];
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _ageController.dispose();
+    _weightController.dispose();
+    _heightFeetController.dispose();
+    _heightInchesController.dispose();
+    _yearsJoinedController.dispose();
+    super.dispose();
+  }
 
   Future<void> _signup() async {
     final username = _usernameController.text.trim();
@@ -24,11 +47,42 @@ class _SignupPageState extends State<SignupPage> {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
+    final age = _ageController.text.trim();
+    final weight = _weightController.text.trim();
+    final heightFeet = _heightFeetController.text.trim();
+    final heightInches = _heightInchesController.text.trim();
+    final yearsJoined = _yearsJoinedController.text.trim();
 
     // Basic validation
-    if (username.isEmpty || name.isEmpty || email.isEmpty || password.isEmpty) {
+    if (username.isEmpty || name.isEmpty || email.isEmpty || password.isEmpty ||
+        age.isEmpty || weight.isEmpty || heightFeet.isEmpty || heightInches.isEmpty || yearsJoined.isEmpty) {
       setState(() {
         _errorMessage = 'All fields are required';
+      });
+      return;
+    }
+
+    // Numeric validation
+    if (!RegExp(r'^\d+$').hasMatch(age) || !RegExp(r'^\d+$').hasMatch(weight) ||
+        !RegExp(r'^\d+$').hasMatch(heightFeet) || !RegExp(r'^\d+$').hasMatch(heightInches) ||
+        !RegExp(r'^\d+$').hasMatch(yearsJoined)) {
+      setState(() {
+        _errorMessage = 'Please enter valid numbers for age, weight, height, and years joined';
+      });
+      return;
+    }
+
+    // Range validation
+    if (int.parse(age) < 13 || int.parse(age) > 120) {
+      setState(() {
+        _errorMessage = 'Please enter a valid age between 13 and 120';
+      });
+      return;
+    }
+
+    if (int.parse(heightFeet) > 8 || int.parse(heightInches) >= 12) {
+      setState(() {
+        _errorMessage = 'Please enter a valid height (feet < 9, inches < 12)';
       });
       return;
     }
@@ -64,16 +118,24 @@ class _SignupPageState extends State<SignupPage> {
     });
 
     try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // Create user account
+      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
       // Update user display name
-      await FirebaseAuth.instance.currentUser?.updateDisplayName(name);
+      await userCredential.user?.updateDisplayName(name);
 
-      // Navigation is now handled by the StreamBuilder in main.dart
-      // No need to navigate manually here
+      // Here you would typically store the additional user data in Firestore
+      // For now, we'll just print it
+      print('Additional user data to be stored:');
+      print('Age: $age');
+      print('Weight: $weight lbs');
+      print('Height: $heightFeet\'$heightInches"');
+      print('Years Joined: $yearsJoined');
+      print('Fitness Level: $_selectedFitnessLevel');
+
     } on FirebaseAuthException catch (e) {
       setState(() {
         _errorMessage = e.message ?? 'An error occurred during signup';
@@ -85,16 +147,6 @@ class _SignupPageState extends State<SignupPage> {
         });
       }
     }
-  }
-
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
   }
 
   @override
@@ -142,6 +194,79 @@ class _SignupPageState extends State<SignupPage> {
                 hintText: 'Email',
                 icon: Icons.email,
                 keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _ageController,
+                hintText: 'Age',
+                icon: Icons.cake,
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _weightController,
+                hintText: 'Weight (lbs)',
+                icon: Icons.monitor_weight,
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _heightFeetController,
+                      hintText: 'Height (ft)',
+                      icon: Icons.height,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _heightInchesController,
+                      hintText: 'Height (in)',
+                      icon: Icons.height,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _yearsJoinedController,
+                hintText: 'Years of Experience',
+                icon: Icons.timeline,
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[900],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedFitnessLevel,
+                    isExpanded: true,
+                    dropdownColor: Colors.grey[900],
+                    style: const TextStyle(color: Colors.white),
+                    icon: const Icon(Icons.fitness_center, color: Colors.white),
+                    items: _fitnessLevels.map((String level) {
+                      return DropdownMenuItem<String>(
+                        value: level,
+                        child: Text(level),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _selectedFitnessLevel = newValue;
+                        });
+                      }
+                    },
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               _buildTextField(
