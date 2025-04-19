@@ -58,6 +58,7 @@ class _MainScreenState extends State<MainScreen> {
       'caption': 'Beautiful day at the beach! 🏖️ #summer #vacation',
       'comments': '24',
       'timeAgo': '2 hours ago',
+      'imageFile': null,
     },
     {
       'username': 'janedoe',
@@ -67,6 +68,7 @@ class _MainScreenState extends State<MainScreen> {
       'caption': 'New recipe I tried today! 🍳 #cooking #foodie',
       'comments': '42',
       'timeAgo': '5 hours ago',
+      'imageFile': null,
     },
     {
       'username': 'traveler',
@@ -76,8 +78,27 @@ class _MainScreenState extends State<MainScreen> {
       'caption': 'Exploring new places ✈️ #travel #adventure',
       'comments': '89',
       'timeAgo': '1 day ago',
+      'imageFile': null,
     },
   ];
+
+  Future<void> _handleCameraResult(dynamic result) async {
+    if (result != null && result is Map<String, dynamic>) {
+      setState(() {
+        _posts.insert(0, {
+          'username': _auth.currentUser?.displayName ?? 'User',
+          'profilePic': Icons.person,
+          'image': Icons.image,
+          'imageFile': result['image'],
+          'caption': result['caption'],
+          'likes': '0',
+          'comments': '0',
+          'timeAgo': 'Just now',
+          'isLiked': false,
+        });
+      });
+    }
+  }
 
   Future<void> _logout() async {
     try {
@@ -127,7 +148,7 @@ class _MainScreenState extends State<MainScreen> {
             ],
           ),
 
-          // Camera Screen (Placeholder)
+          // Camera Screen
           const CameraScreen(),
 
           // Profile Screen
@@ -246,10 +267,25 @@ class _MainScreenState extends State<MainScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
+        onTap: (index) async {
+          if (index == 1) {
+            // Camera tab
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CameraScreen(),
+              ),
+            );
+            await _handleCameraResult(result);
+            // Return to feed after creating post
+            setState(() {
+              _selectedIndex = 0;
+            });
+          } else {
+            setState(() {
+              _selectedIndex = index;
+            });
+          }
         },
         items: const [
           BottomNavigationBarItem(
@@ -319,13 +355,20 @@ class _MainScreenState extends State<MainScreen> {
               child: Container(
                 height: 400,
                 color: Colors.grey[800],
-                child: Center(
-                  child: Icon(
-                    post['image'],
-                    size: 100,
-                    color: Colors.grey[600],
-                  ),
-                ),
+                child: post['imageFile'] != null
+                    ? Image.file(
+                        post['imageFile'],
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      )
+                    : Center(
+                        child: Icon(
+                          post['image'],
+                          size: 100,
+                          color: Colors.grey[600],
+                        ),
+                      ),
               ),
             ),
             if (post['showLikeAnimation'] == true)
