@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_page.dart';
+import 'screens/camera_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -137,23 +138,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
 
           // Camera Screen (Placeholder)
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.camera_alt,
-                  size: 100,
-                  color: Colors.white,
-                ),
-                SizedBox(height: 20),
-                Text(
-                  'Camera Feature Coming Soon',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
-          ),
+          const CameraScreen(),
 
           // Profile Screen
           CustomScrollView(
