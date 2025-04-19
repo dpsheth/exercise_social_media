@@ -136,10 +136,32 @@ class _SignupPageState extends State<SignupPage> {
       print('Years Joined: $yearsJoined');
       print('Fitness Level: $_selectedFitnessLevel');
 
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account created successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // The StreamBuilder in main.dart will automatically navigate to MainScreen
+      // because the auth state has changed
+
     } on FirebaseAuthException catch (e) {
       setState(() {
         _errorMessage = e.message ?? 'An error occurred during signup';
       });
+      // Show error in a snackbar as well
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message ?? 'An error occurred during signup'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
