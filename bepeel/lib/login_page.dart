@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'main.dart'; // Add this import to access MainScreen
+import 'signup_page.dart'; // Add this import to access SignupPage
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -128,6 +129,30 @@ class _LoginPageState extends State<LoginPage> {
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SignupPage()),
+                  );
+                },
+                child: RichText(
+                  text: TextSpan(
+                    text: "Don't have an account? ",
+                    style: TextStyle(color: Colors.grey[400]),
+                    children: const [
+                      TextSpan(
+                        text: 'Sign Up',
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
