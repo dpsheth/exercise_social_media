@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'main.dart'; // Add this import to access MainScreen
 import 'signup_page.dart'; // Add this import to access SignupPage
+import 'forgot_password_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -132,7 +133,24 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ForgotPasswordPage(),
+                    ),
+                  );
+                },
+                child: Text(
+                  'Forgot Password?',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               TextButton(
                 onPressed: () {
                   Navigator.push(
