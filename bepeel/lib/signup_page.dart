@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'main.dart';
 
 class SignupPage extends StatefulWidget {
@@ -15,8 +16,9 @@ class _SignupPageState extends State<SignupPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   String _errorMessage = '';
+  bool _isLoading = false;
 
-  void _signup() {
+  Future<void> _signup() async {
     final username = _usernameController.text.trim();
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -56,12 +58,33 @@ class _SignupPageState extends State<SignupPage> {
       return;
     }
 
-    // If all validations pass, proceed to main screen
-    // In a real app, you would typically make an API call here
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const MainScreen()),
-    );
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      // Update user display name
+      await FirebaseAuth.instance.currentUser?.updateDisplayName(name);
+
+      // Navigation is now handled by the StreamBuilder in main.dart
+      // No need to navigate manually here
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _errorMessage = e.message ?? 'An error occurred during signup';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -148,7 +171,7 @@ class _SignupPageState extends State<SignupPage> {
                 ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _signup,
+                onPressed: _isLoading ? null : _signup,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -156,14 +179,16 @@ class _SignupPageState extends State<SignupPage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text(
-                  'Sign Up',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        'Sign Up',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ],
           ),
@@ -197,4 +222,4 @@ class _SignupPageState extends State<SignupPage> {
       ),
     );
   }
-} 
+}

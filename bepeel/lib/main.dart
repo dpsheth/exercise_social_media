@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'login_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(const MyApp());
 }
 
@@ -16,7 +20,18 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.black),
         useMaterial3: true,
       ),
-      home: const LoginPage(),
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasData) {
+            return const MainScreen();
+          }
+          return const LoginPage();
+        },
+      ),
     );
   }
 }
@@ -30,6 +45,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // Dummy posts data
   final List<Map<String, dynamic>> _posts = [
@@ -61,6 +77,22 @@ class _MainScreenState extends State<MainScreen> {
       'timeAgo': '1 day ago',
     },
   ];
+
+  Future<void> _logout() async {
+    try {
+      await _auth.signOut();
+      // Navigation is handled by the StreamBuilder in main.dart
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error signing out'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +135,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ],
           ),
-          
+
           // Camera Screen (Placeholder)
           Center(
             child: Column(
@@ -122,7 +154,7 @@ class _MainScreenState extends State<MainScreen> {
               ],
             ),
           ),
-          
+
           // Profile Screen
           CustomScrollView(
             slivers: [
@@ -165,7 +197,7 @@ class _MainScreenState extends State<MainScreen> {
                             child: Column(
                               children: [
                                 Text(
-                                  'John Doe',
+                                  _auth.currentUser?.displayName ?? 'User',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 24,
@@ -174,7 +206,7 @@ class _MainScreenState extends State<MainScreen> {
                                 ),
                                 SizedBox(height: 8),
                                 Text(
-                                  'Age: 25',
+                                  _auth.currentUser?.email ?? '',
                                   style: TextStyle(
                                     color: Colors.grey[400],
                                     fontSize: 16,
@@ -184,10 +216,8 @@ class _MainScreenState extends State<MainScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: Icon(Icons.edit, color: Colors.white),
-                            onPressed: () {
-                              // Edit profile functionality
-                            },
+                            icon: Icon(Icons.logout, color: Colors.white),
+                            onPressed: _logout,
                           ),
                         ],
                       ),

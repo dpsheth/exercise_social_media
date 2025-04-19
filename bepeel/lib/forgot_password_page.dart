@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -11,8 +12,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _emailController = TextEditingController();
   String _message = '';
   bool _isSuccess = false;
+  bool _isLoading = false;
 
-  void _resetPassword() {
+  Future<void> _resetPassword() async {
     final email = _emailController.text.trim();
 
     // Email validation
@@ -25,16 +27,36 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       return;
     }
 
-    // Simulate password reset request
     setState(() {
-      _message = 'Password reset link has been sent to your email';
-      _isSuccess = true;
+      _isLoading = true;
+      _message = '';
     });
 
-    // Return to login page after 2 seconds
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pop(context);
-    });
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      setState(() {
+        _message = 'Password reset link has been sent to your email';
+        _isSuccess = true;
+      });
+
+      // Return to login page after 2 seconds
+      if (mounted) {
+        Future.delayed(const Duration(seconds: 2), () {
+          Navigator.pop(context);
+        });
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _message = e.message ?? 'An error occurred';
+        _isSuccess = false;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -112,7 +134,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: _resetPassword,
+                  onPressed: _isLoading ? null : _resetPassword,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -120,14 +142,16 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text(
-                    'Reset Password',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'Reset Password',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -136,4 +160,4 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       ),
     );
   }
-} 
+}

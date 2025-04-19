@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'main.dart'; // Add this import to access MainScreen
 import 'signup_page.dart'; // Add this import to access SignupPage
 import 'forgot_password_page.dart';
@@ -14,31 +15,42 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   String _errorMessage = '';
+  bool _isLoading = false;
 
-  void _login() {
+  Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // Hardcoded credentials
-    const validEmail = 'darshilsheth491@gmail.com';
-    const validPassword = '123456';
+    if (email.isEmpty || password.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please fill in all fields';
+      });
+      return;
+    }
 
-    if (email == validEmail && password == validPassword) {
-      // Clear error message
-      setState(() {
-        _errorMessage = '';
-      });
-      
-      // Navigate to main screen
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainScreen()),
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
-    } else {
-      // Show error message
+
+      // Navigation is now handled by the StreamBuilder in main.dart
+      // No need to navigate manually here
+    } on FirebaseAuthException catch (e) {
       setState(() {
-        _errorMessage = 'Invalid email or password';
+        _errorMessage = e.message ?? 'An error occurred';
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -118,7 +130,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: _login,
+                  onPressed: _isLoading ? null : _login,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -126,14 +138,16 @@ class _LoginPageState extends State<LoginPage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text(
-                    'Log In',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'Log In',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
                 TextButton(
                   onPressed: () {
@@ -156,7 +170,8 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const SignupPage()),
+                      MaterialPageRoute(
+                          builder: (context) => const SignupPage()),
                     );
                   },
                   child: RichText(
@@ -183,4 +198,4 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
-} 
+}
