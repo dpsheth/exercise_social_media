@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "1024641673188",
-    "project_id": "broncohacks2025---bepeel",
-    "storage_bucket": "broncohacks2025---bepeel.firebasestorage.app"
+    "project_number": "414333258149",
+    "project_id": "bepeel-revamped",
+    "storage_bucket": "bepeel-revamped.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1024641673188:android:e52a2083fd54f7b67a49f1",
+        "mobilesdk_app_id": "1:414333258149:android:3942b7773b7d1dad84404c",
         "android_client_info": {
           "package_name": "com.example.bepeel"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCO0wfQDloKeSC-82EEpqVBVCvK11qioOo"
+          "current_key": "AIzaSyAPpYPwzZYtsjnmtQ9EkiQgzvWiMz9nQns"
         }
       ],
       "services": {

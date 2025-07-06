@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:bepeel/screens/profile_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'main.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -52,15 +54,6 @@ class _SignupPageState extends State<SignupPage> {
     final heightFeet = _heightFeetController.text.trim();
     final heightInches = _heightInchesController.text.trim();
     final yearsJoined = _yearsJoinedController.text.trim();
-
-    // Basic validation
-    if (username.isEmpty || name.isEmpty || email.isEmpty || password.isEmpty ||
-        age.isEmpty || weight.isEmpty || heightFeet.isEmpty || heightInches.isEmpty || yearsJoined.isEmpty) {
-      setState(() {
-        _errorMessage = 'All fields are required';
-      });
-      return;
-    }
 
     // Numeric validation
     if (!RegExp(r'^\d+$').hasMatch(age) || !RegExp(r'^\d+$').hasMatch(weight) ||
@@ -117,57 +110,89 @@ class _SignupPageState extends State<SignupPage> {
       _errorMessage = '';
     });
 
+    UserCredential? userCredential;
+
     try {
-      // Create user account
-      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // Try to create user account
+      userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-
-      // Update user display name
-      await userCredential.user?.updateDisplayName(name);
-
-      // Here you would typically store the additional user data in Firestore
-      // For now, we'll just print it
-      print('Additional user data to be stored:');
-      print('Age: $age');
-      print('Weight: $weight lbs');
-      print('Height: $heightFeet\'$heightInches"');
-      print('Years Joined: $yearsJoined');
-      print('Fitness Level: $_selectedFitnessLevel');
-
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+    } catch (e) {
+      debugPrint('Auth error (possibly PigeonUserDetails): $e');
+      // Even if there's an auth error, the user might still be created
+      // So we'll try to get the current user
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        debugPrint('Using existing user after auth error: ${currentUser.uid}');
+      } else {
+        rethrow; // Re-throw if we couldn't get a user
       }
+    }
 
-      // The StreamBuilder in main.dart will automatically navigate to MainScreen
-      // because the auth state has changed
-
-    } on FirebaseAuthException catch (e) {
+    final user = userCredential?.user ?? FirebaseAuth.instance.currentUser;
+    if (user == null) {
       setState(() {
-        _errorMessage = e.message ?? 'An error occurred during signup';
+        _errorMessage = 'Failed to create or get user';
+        _isLoading = false;
       });
-      // Show error in a snackbar as well
+      return;
+    }
+
+    final userId = user.uid;
+    debugPrint('Using user ID: $userId');
+    debugPrint('Project during signup: ${Firebase.app().options.projectId}');
+
+    final userData = {
+      'username': username,
+      'name': name,
+      'email': email,
+      'age': int.tryParse(age) ?? 0,
+      'weight': int.tryParse(weight) ?? 0,
+      'heightFeet': int.tryParse(heightFeet) ?? 0,
+      'heightInches': int.tryParse(heightInches) ?? 0,
+      'yearsJoined': int.tryParse(yearsJoined) ?? 0, // Changed from yearsExperience to yearsJoined
+      'fitnessLevel': _selectedFitnessLevel,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    try {
+      debugPrint('Saving user data: $userData');
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .set(userData, SetOptions(merge: true));
+
+      debugPrint('User data saved successfully');
+    } catch (e, stackTrace) {
+      debugPrint('Firestore write error: $e');
+      debugPrint('Stack trace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message ?? 'An error occurred during signup'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error saving profile: $e')),
         );
       }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      // Don't rethrow here, as we want to continue to the success page
+    }
+
+    // Show success message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account created successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+
+    // The StreamBuilder in main.dart will automatically navigate to MainScreen
+    // because the auth state has changed
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 

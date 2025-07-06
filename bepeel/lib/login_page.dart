@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'main.dart'; // Add this import to access MainScreen
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+// Add this import to access MainScreen
 import 'signup_page.dart'; // Add this import to access SignupPage
 import 'forgot_password_page.dart';
 
@@ -34,14 +34,14 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await firebase_auth.FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
       // Navigation is now handled by the StreamBuilder in main.dart
       // No need to navigate manually here
-    } on FirebaseAuthException catch (e) {
+    } on firebase_auth.FirebaseAuthException catch (e) {
       setState(() {
         _errorMessage = e.message ?? 'An error occurred';
       });
