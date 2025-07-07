@@ -1,12 +1,11 @@
-# BroncoHacks2025
+# BePeel
 
-**Team Name:** Dream Team  
-**Video Demo:** [Watch on YouTube](https://youtu.be/ASo6Ao8WUI8?si=-QYZVvVqtndh3OSM)
+**Originally Created At:** BroncoHacks 2025  
+**Video Demo:** [Watch on YouTube](https://youtu.be/02DWkbZjYc4)
 
 ## 📌 Overview
 
-BroncoHacks2025 is a collaborative project developed for the BroncoHacks 2025 hackathon.
-The project showcases a cross-platform application built using a combination of programming languages and tools to deliver a robust and efficient solution.
+This project was inspired by our work at BroncoHacks 2025, where we initially developed a cross-platform application for social fitness tracking. After the hackathon, I've continued developing it with permission from the original team members.
 
 ## 🛠️ Technologies Used
 
@@ -19,12 +18,15 @@ The project showcases a cross-platform application built using a combination of 
 
 These technologies were chosen to leverage their respective strengths in system-level programming, cross-platform development, and scripting capabilities.
 
-## 👥 Contributors
+## 👥 Original BroncoHacks 2025 Team
+
+Special thanks to the original team members who worked on this project during BroncoHacks 2025:
 
 - [Alexander Sanna (ajsanna)](https://github.com/ajsanna)
-- [Darshil Sheth (dpsheth)](https://github.com/dpsheth)
 - [Michael Ly (MichaelLy766)](https://github.com/MichaelLy766)
 - [SigsFig](https://github.com/SigsFig)
+
+*This project is being continued with their permission.*
 
 ## 📂 Repository Structure
 
