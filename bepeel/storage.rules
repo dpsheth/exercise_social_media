@@ -1,0 +1,22 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow read access to all files
+    match /{allPaths=**} {
+      allow read: if true;
+    }
+    
+    // Allow users to upload files to their own directory
+    match /posts/{userId}/{fileName} {
+      allow create: if request.auth != null 
+                  && request.auth.uid == userId
+                  && request.resource.contentType.matches('image/.*|video/.*');
+    }
+    
+    // Users can delete their own files
+    match /{path=**}/posts/{userId}/{fileName} {
+      allow delete: if request.auth != null 
+                  && request.auth.uid == userId;
+    }
+  }
+}

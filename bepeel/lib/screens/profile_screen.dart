@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' show SetOptions;
+import 'package:cached_network_image/cached_network_image.dart';
+import 'feed_screen.dart';
 
 const Map<int, Color> activityColors = {
   0: Color(0xFF1F1F1F),
@@ -14,12 +17,14 @@ const Map<int, Color> activityColors = {
 class ProfileScreen extends StatefulWidget {
   final String userId;
   final bool isCurrentUser;
+  final Function(String)? onPostSelected;
 
   const ProfileScreen({
-    super.key,
+    Key? key,
     required this.userId,
-    required this.isCurrentUser,
-  });
+    this.isCurrentUser = false,
+    this.onPostSelected,
+  }) : super(key: key);
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -32,6 +37,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isEditing = false;
   bool _isLoading = true;
   Map<String, dynamic> _userDoc = {};
+  List<Map<String, dynamic>> _userPosts = [];
+  StreamSubscription? _postsSubscription;
+  List<Map<String, dynamic>> _allPosts = [];
+  
 
   // controllers created later once data loads
   final Map<String, TextEditingController> _controllers = {
@@ -48,6 +57,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadUserPosts();
+    _loadAllPosts();
   }
 
   Future<void> _loadUserData() async {
@@ -192,10 +203,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // Load all posts to find the correct position in the main feed
+  void _loadAllPosts() {
+    _firestore
+        .collection('posts')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _allPosts = snapshot.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return {
+              'id': doc.id,
+              ...data,
+            };
+          }).toList();
+        });
+      }
+    });
+  }
+  
+  // Find the index of a post in the main feed
+  int _findPostIndexInFeed(String postId) {
+    return _allPosts.indexWhere((post) => post['id'] == postId);
+  }
+
   @override
   void dispose() {
     _controllers.values.forEach((c) => c.dispose());
     _usernameController.dispose();
+    _postsSubscription?.cancel();
     super.dispose();
   }
 
@@ -228,63 +266,403 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ---------- UI helpers for posts and calendar (unchanged) ----------
-  Widget _buildPostPreview() {
-    return Container(
-      width: 120,
-      height: 120,
-      margin: const EdgeInsets.only(right: 12),
-      decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
-      child: Stack(fit: StackFit.expand, children: [
-        Icon(Icons.fitness_center, color: Colors.grey[600], size: 40),
-        const Positioned(bottom: 8, left: 8, child: Text('2d ago', style: TextStyle(color: Colors.grey, fontSize: 12))),
-      ]),
+  // Load user's posts from Firestore
+  void _loadUserPosts() {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    _postsSubscription = _firestore
+        .collection('posts')
+        .where('userId', isEqualTo: user.uid)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .listen((snapshot) async {
+      if (mounted) {
+        try {
+          final posts = <Map<String, dynamic>>[];
+          
+          // Process each post document
+          for (var doc in snapshot.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            
+            // Get the latest user data for profile image
+            String? profileImageUrl = data['profileImageUrl'];
+            if (profileImageUrl == null || profileImageUrl.isEmpty) {
+              try {
+                final userDoc = await _firestore.collection('users').doc(user.uid).get();
+                if (userDoc.exists) {
+                  profileImageUrl = userDoc.data()?['profileImageUrl'] ?? '';
+                }
+              } catch (e) {
+                debugPrint('Error fetching user data: $e');
+              }
+            }
+            
+            // Get the first media URL if it's a list, or use the single URL
+            dynamic mediaUrl = data['mediaUrl'];
+            if (mediaUrl is List && mediaUrl.isNotEmpty) {
+              mediaUrl = mediaUrl.first;
+            }
+            
+            final post = {
+              'id': doc.id,
+              'mediaUrl': mediaUrl?.toString() ?? '',
+              'isVideo': data['isVideo'] ?? false,
+              'caption': data['caption'] ?? '',
+              'likes': data['likes'] ?? 0,
+              'comments': data['comments'] ?? 0,
+              'timestamp': data['timestamp'] ?? Timestamp.now(),
+              'username': data['username'] ?? 'user',
+              'profileImageUrl': profileImageUrl ?? '',
+              'timeAgo': _formatTimeAgo((data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now()),
+            };
+            
+            posts.add(post);
+          }
+          
+          if (mounted) {
+            setState(() {
+              _userPosts = posts;
+            });
+          }
+        } catch (e) {
+          debugPrint('Error processing posts: $e');
+        }
+      }
+    }, onError: (error) {
+      debugPrint('Error loading user posts: $error');
+    });
+  }
+
+  // Format timestamp to relative time (e.g., "2d ago")
+  String _formatTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()}y ago';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()}mo ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  // Build a post preview that shows the user's actual posts
+  Widget _buildPostPreview(int index) {
+    if (index >= _userPosts.length) {
+      return Container();
+    }
+
+    final post = _userPosts[index];
+    final isVideo = post['isVideo'] == true;
+    
+    return GestureDetector(
+      onTap: () {
+        // Navigate back to the main screen and pass the post ID to scroll to
+        Navigator.popUntil(context, (route) {
+          if (route.settings.name == '/') {
+            // Use a callback to communicate with the parent widget
+            if (widget.onPostSelected != null) {
+              widget.onPostSelected!(post['id']);
+            }
+            return true;
+          }
+          return false;
+        });
+      },
+      child: Container(
+        width: 120,
+        height: 120,
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey[800]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Show post image or video thumbnail
+              if (post['mediaUrl'] != null && post['mediaUrl'].toString().isNotEmpty)
+                CachedNetworkImage(
+                  imageUrl: post['mediaUrl'].toString(),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  placeholder: (context, url) => Container(
+                    color: Colors.grey[800],
+                    child: const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey[800],
+                    child: const Icon(Icons.broken_image, color: Colors.white24, size: 32),
+                  ),
+                )
+              else
+                Container(
+                  color: Colors.grey[800],
+                  child: const Icon(Icons.broken_image, color: Colors.white24, size: 32),
+                ),
+              if (isVideo)
+                const Align(
+                  alignment: Alignment.bottomRight,
+                  child: Padding(
+                    padding: EdgeInsets.all(6.0),
+                    child: Icon(Icons.videocam, color: Colors.white, size: 20),
+                  ),
+                ),
+              // Time ago overlay
+              Positioned(
+                left: 8,
+                bottom: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _formatTimeAgoCompact((post['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now()),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+  
+  // Format time in a compact way for thumbnails
+  String _formatTimeAgoCompact(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inMinutes < 1) return 'now';
+    if (difference.inHours < 1) return '${difference.inMinutes}m';
+    if (difference.inDays < 1) return '${difference.inHours}h';
+    if (difference.inDays < 30) return '${difference.inDays}d';
+    
+    final months = (difference.inDays / 30).floor();
+    if (months < 12) return '${months}mo';
+    
+    final years = (months / 12).floor();
+    return '${years}y';
+  }
+
+
+  // ------------------- BUILD -------------------
+  // Calculate post frequency for the last 28 days
+  Map<DateTime, int> _calculatePostFrequency() {
+    final now = DateTime.now();
+    final startDate = now.subtract(const Duration(days: 27)); // Last 28 days including today
+    final postFrequency = <DateTime, int>{};
+    
+    // Initialize all dates with 0 posts
+    for (var i = 0; i < 28; i++) {
+      final date = startDate.add(Duration(days: i));
+      // Store only the date part (without time)
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      postFrequency[dateOnly] = 0;
+    }
+    
+    // Count posts for each date
+    for (var post in _userPosts) {
+      final timestamp = post['timestamp'] as Timestamp?;
+      if (timestamp != null) {
+        final postDate = timestamp.toDate();
+        final dateOnly = DateTime(postDate.year, postDate.month, postDate.day);
+        
+        // Only count posts from the last 28 days
+        if (dateOnly.isAfter(startDate.subtract(const Duration(days: 1)))) {
+          postFrequency[dateOnly] = (postFrequency[dateOnly] ?? 0) + 1;
+        }
+      }
+    }
+    
+    return postFrequency;
+  }
+  
+  // Get color based on post count for a day
+  Color _getColorForPostCount(int count) {
+    if (count == 0) return Colors.grey[900]!; // No posts - darkest
+    if (count == 1) return Colors.green[900]!; // 1 post - dark green
+    if (count == 2) return Colors.green[700]!; // 2 posts - medium dark green
+    if (count == 3) return Colors.green[500]!; // 3 posts - medium green
+    return Colors.green[300]!; // 4+ posts - light green
+  }
+  
+  // Get day abbreviation (S, M, T, W, T, F, S)
+  String _getDayAbbreviation(int dayIndex) {
+    const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    return days[dayIndex];
+  }
+  
+  // Format date for tooltip
+  String _formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}';
   }
 
   Widget _buildActivityCalendar() {
-    final data = List.generate(6, (i) => List.generate(5, (j) => (i + j) % 5));
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Padding(
-        padding: EdgeInsets.only(bottom: 16),
-        child: Text('Last 30 Days Activity', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+    final postFrequency = _calculatePostFrequency();
+    final now = DateTime.now();
+    final startDate = now.subtract(const Duration(days: 27)); // Last 28 days
+    
+    // Get the weekday of the start date (0 = Sunday, 1 = Monday, etc.)
+    final startWeekday = startDate.weekday % 7;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
       ),
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(8)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [const SizedBox(width: 24), ...['M', 'T', 'W', 'T', 'F'].map((d) => Expanded(child: Text(d, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12))))]),
-          const SizedBox(height: 8),
-          Row(children: [
-            Column(children: ['30d', '20d', '10d', 'now'].map((l) => Container(height: 35, width: 24, alignment: Alignment.centerLeft, child: Text(l, style: const TextStyle(color: Colors.grey, fontSize: 10)))).toList()),
-            const SizedBox(width: 4),
-            Expanded(
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 5, crossAxisSpacing: 4, mainAxisSpacing: 4),
-                itemCount: 30,
-                itemBuilder: (context, idx) {
-                  final r = idx ~/ 5, c = idx % 5;
-                  return Container(decoration: BoxDecoration(color: activityColors[data[r][c]], borderRadius: BorderRadius.circular(2)));
-                },
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Exercise Activity',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
-          ]),
+          ),
           const SizedBox(height: 16),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Text('Less', style: TextStyle(color: Colors.white70, fontSize: 12)),
-            const SizedBox(width: 8),
-            ...activityColors.values.map((v) => Container(width: 16, height: 16, margin: const EdgeInsets.symmetric(horizontal: 2), decoration: BoxDecoration(color: v, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(width: 8),
-            const Text('More', style: TextStyle(color: Colors.white70, fontSize: 12)),
-          ]),
-        ]),
+          
+          // Day of week headers
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(7, (index) {
+              return SizedBox(
+                width: 24,
+                child: Text(
+                  _getDayAbbreviation(index),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 12,
+                  ),
+                ),
+              );
+            }),
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Calendar grid
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 4,
+              childAspectRatio: 1,
+            ),
+            itemCount: 7 * 5, // 5 rows x 7 days
+            itemBuilder: (context, index) {
+              // Calculate the day this cell represents
+              final dayOffset = index - startWeekday;
+              if (dayOffset < 0 || dayOffset > 27) {
+                // Empty cell for alignment
+                return const SizedBox.shrink();
+              }
+              
+              final cellDate = startDate.add(Duration(days: dayOffset));
+              final dateKey = DateTime(cellDate.year, cellDate.month, cellDate.day);
+              final postCount = postFrequency[dateKey] ?? 0;
+              
+              return Tooltip(
+                message: postCount > 0 
+                    ? '$postCount ${postCount == 1 ? 'post' : 'posts'} on ${_formatDate(cellDate)}'
+                    : 'No posts on ${_formatDate(cellDate)}',
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _getColorForPostCount(postCount),
+                    borderRadius: BorderRadius.circular(2),
+                    border: Border.all(
+                      color: Colors.grey[800]!,
+                      width: 0.5,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Legend
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Less',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildActivityLevel(Colors.green[900]!),
+              const SizedBox(width: 2),
+              _buildActivityLevel(Colors.green[700]!),
+              const SizedBox(width: 2),
+              _buildActivityLevel(Colors.green[500]!),
+              const SizedBox(width: 2),
+              _buildActivityLevel(Colors.green[300]!),
+              const SizedBox(width: 8),
+              const Text(
+                'More',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
-    ]);
+    );
   }
 
-  // ------------------- BUILD -------------------
+  Widget _buildActivityLevel(Color color) {
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -368,12 +746,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Recent Posts', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
-                SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: List.generate(5, (_) => _buildPostPreview()))),
+                _userPosts.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16.0),
+                        child: Text(
+                          'No posts yet',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : SizedBox(
+                        height: 140,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _userPosts.length,
+                          itemBuilder: (context, index) => _buildPostPreview(index),
+                        ),
+                      ),
               ]),
             ),
             const SizedBox(height: 32),
-            // activity calendar
-            Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Fitness Activity', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)), const SizedBox(height: 16), _buildActivityCalendar()]),),
+            // Activity calendar
+            _buildActivityCalendar(),
           ]),
         ),
       ),
